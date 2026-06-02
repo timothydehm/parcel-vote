@@ -16,6 +16,13 @@ export type MapData = {
   parcels: ParcelCollection;
   is_open: boolean;
   counts: Record<string, number>;
+  commentCounts: Record<string, number>;
   totalVoters: number;
   yourVotes: string[];
+};
+
+export type Comment = {
+  id: string;
+  body: string;
+  created_at: string;
 };

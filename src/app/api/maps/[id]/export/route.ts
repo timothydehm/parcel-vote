@@ -5,7 +5,11 @@ import type { ParcelFeature } from "@/lib/types";
 
 export const runtime = "nodejs";
 
-// GET /api/maps/:id/export?token=ADMIN&format=geojson|csv
+function csvCell(s: string): string {
+  return '"' + s.replace(/"/g, '""') + '"';
+}
+
+// GET /api/maps/:id/export?token=ADMIN&format=geojson|csv|comments
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const url = new URL(req.url);
   const token = url.searchParams.get("token") ?? "";
@@ -23,18 +27,36 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   }
 
+  if (format === "comments") {
+    const { data } = await db
+      .from("comments")
+      .select("parcel_id, body, created_at")
+      .eq("map_id", map.id)
+      .order("created_at", { ascending: true });
+    const rows = ["parcel_id,comment,created_at"];
+    for (const c of data ?? []) {
+      rows.push([csvCell(c.parcel_id), csvCell(c.body), csvCell(c.created_at)].join(","));
+    }
+    return new NextResponse(rows.join("\n"), {
+      headers: {
+        "content-type": "text/csv; charset=utf-8",
+        "content-disposition": `attachment; filename="parcel-pulse-comments-${map.id}.csv"`,
+      },
+    });
+  }
+
   const { counts, totalVoters } = await tallyMap(map.id, null);
   const features = (map.parcels as { features: ParcelFeature[] }).features;
 
   if (format === "csv") {
-    const rows = [["parcel_id", "votes", "share", "total_voters"]];
+    const rows = ["parcel_id,votes,share,total_voters"];
     for (const f of features) {
       const pid = f.properties.__pid;
       const v = counts[pid] ?? 0;
-      rows.push([pid, String(v), totalVoters ? (v / totalVoters).toFixed(4) : "0", String(totalVoters)]);
+      const share = totalVoters ? (v / totalVoters).toFixed(4) : "0";
+      rows.push([csvCell(pid), String(v), share, String(totalVoters)].join(","));
     }
-    const csv = rows.map((r) => r.join(",")).join("\n");
-    return new NextResponse(csv, {
+    return new NextResponse(rows.join("\n"), {
       headers: {
         "content-type": "text/csv; charset=utf-8",
         "content-disposition": `attachment; filename="parcel-pulse-${map.id}.csv"`,

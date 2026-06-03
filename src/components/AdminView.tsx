@@ -6,6 +6,8 @@ import type { MapData } from "@/lib/types";
 export default function AdminView({ id, token }: { id: string; token: string }) {
   const [data, setData] = useState<MapData | null>(null);
   const [error, setError] = useState("");
+  const [limitInput, setLimitInput] = useState("");
+  const [savingLimit, setSavingLimit] = useState(false);
 
   async function load() {
     try {
@@ -23,6 +25,10 @@ export default function AdminView({ id, token }: { id: string; token: string }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  useEffect(() => {
+    if (data) setLimitInput(data.vote_limit != null ? String(data.vote_limit) : "");
+  }, [data?.vote_limit]);
+
   async function setOpen(is_open: boolean) {
     await fetch(`/api/maps/${id}/close?token=${encodeURIComponent(token)}`, {
       method: "POST",
@@ -30,6 +36,20 @@ export default function AdminView({ id, token }: { id: string; token: string }) 
       body: JSON.stringify({ is_open }),
     });
     load();
+  }
+
+  async function saveLimit() {
+    setSavingLimit(true);
+    try {
+      await fetch(`/api/maps/${id}/close?token=${encodeURIComponent(token)}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ vote_limit: limitInput.trim() === "" ? null : Number(limitInput) }),
+      });
+      await load();
+    } finally {
+      setSavingLimit(false);
+    }
   }
 
   if (error) return <div className="p-6 text-red-600">{error}</div>;
@@ -54,7 +74,8 @@ export default function AdminView({ id, token }: { id: string; token: string }) 
         {data.totalVoters} total {data.totalVoters === 1 ? "voter" : "voters"} {"·"}{" "}
         <span className={data.is_open ? "text-green-600" : "text-red-600"}>
           {data.is_open ? "open" : "closed"}
-        </span>
+        </span>{" "}
+        {"·"} {data.vote_limit ? `${data.vote_limit} votes each` : "unlimited votes"}
       </p>
 
       <div className="mt-4 flex flex-wrap gap-2">
@@ -82,6 +103,29 @@ export default function AdminView({ id, token }: { id: string; token: string }) 
             Reopen map
           </button>
         )}
+      </div>
+
+      <div className="mt-5 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <label htmlFor="vote-limit" className="text-sm font-medium">
+          Votes per person
+        </label>
+        <input
+          id="vote-limit"
+          type="number"
+          min={1}
+          value={limitInput}
+          onChange={(e) => setLimitInput(e.target.value)}
+          placeholder="unlimited"
+          className="w-28 rounded border border-slate-300 px-2 py-1 text-sm"
+        />
+        <button
+          onClick={saveLimit}
+          disabled={savingLimit}
+          className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+        >
+          {savingLimit ? "Saving…" : "Save"}
+        </button>
+        <span className="text-xs text-slate-500">Blank = unlimited. Lowering it won&rsquo;t remove existing votes.</span>
       </div>
 
       <table className="mt-6 w-full border-collapse text-sm">

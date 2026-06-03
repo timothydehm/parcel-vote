@@ -43,6 +43,7 @@ export default function MapVote({ id }: { id: string }) {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [noteError, setNoteError] = useState("");
+  const [voteNote, setVoteNote] = useState("");
   const [joinName, setJoinName] = useState("");
   const [joinPassword, setJoinPassword] = useState("");
   const [joinBusy, setJoinBusy] = useState(false);
@@ -53,6 +54,13 @@ export default function MapVote({ id }: { id: string }) {
   useEffect(() => {
     modeRef.current = mode;
   }, [mode]);
+
+  // Auto-dismiss the transient vote message.
+  useEffect(() => {
+    if (!voteNote) return;
+    const t = setTimeout(() => setVoteNote(""), 3500);
+    return () => clearTimeout(t);
+  }, [voteNote]);
 
   async function load() {
     try {
@@ -148,12 +156,22 @@ export default function MapVote({ id }: { id: string }) {
         await load();
         return;
       }
-      const d = await r.json();
+      let d: { counts?: Record<string, number>; totalVoters?: number; yourVotes?: string[]; error?: string } = {};
+      try {
+        d = await r.json();
+      } catch {
+        /* non-JSON */
+      }
       if (r.ok) {
         setData((prev) =>
-          prev ? { ...prev, counts: d.counts, totalVoters: d.totalVoters, yourVotes: d.yourVotes } : prev,
+          prev
+            ? { ...prev, counts: d.counts ?? {}, totalVoters: d.totalVoters ?? 0, yourVotes: d.yourVotes ?? [] }
+            : prev,
         );
         setVersion((v) => v + 1);
+        setVoteNote("");
+      } else {
+        setVoteNote(d.error || "Could not vote.");
       }
     } catch {
       /* a failed vote is silently ignored; the map state is unchanged */
@@ -252,6 +270,7 @@ export default function MapVote({ id }: { id: string }) {
           <h1 className="text-lg font-semibold">{data.question}</h1>
           <p className="mt-1 text-sm text-slate-500">
             Enter a name to take part. Add a password to protect it (optional) so only you can use it.
+            {data.vote_limit ? ` You get ${data.vote_limit} votes.` : ""}
           </p>
           <form onSubmit={join} className="mt-4 space-y-3">
             <input
@@ -291,6 +310,7 @@ export default function MapVote({ id }: { id: string }) {
   const selVotes = selected ? data.counts[selected] ?? 0 : 0;
   const selShare = data.totalVoters ? Math.round((selVotes / data.totalVoters) * 100) : 0;
   const selMine = selected ? data.yourVotes.includes(selected) : false;
+  const remaining = data.vote_limit ? Math.max(0, data.vote_limit - data.yourVotes.length) : null;
 
   const segActive = "rounded-md bg-blue-600 px-3 py-1 text-sm font-medium text-white";
   const segIdle = "rounded-md px-3 py-1 text-sm font-medium text-slate-600";
@@ -307,6 +327,12 @@ export default function MapVote({ id }: { id: string }) {
                 ? "Vote mode — click a parcel to cast or remove your vote."
                 : "Notes mode — click a parcel to read or add notes."}{" "}
             {"·"} {data.totalVoters} {data.totalVoters === 1 ? "person has" : "people have"} voted
+            {remaining !== null ? (
+              <span className="font-medium text-slate-700">
+                {" · "}
+                {remaining} of {data.vote_limit} votes left
+              </span>
+            ) : null}
           </p>
           <p className="truncate text-xs text-slate-400">
             You&rsquo;re <span className="font-medium text-slate-600">{data.me}</span>{" "}
@@ -342,6 +368,12 @@ export default function MapVote({ id }: { id: string }) {
             onEachFeature={onEach}
           />
         </MapContainer>
+
+        {voteNote && (
+          <div className="pointer-events-none absolute bottom-4 left-1/2 z-[1200] max-w-[90%] -translate-x-1/2 rounded-md bg-slate-900 px-4 py-2 text-center text-sm text-white shadow-lg">
+            {voteNote}
+          </div>
+        )}
 
         {mode === "notes" && selected && (
           <div className="absolute right-3 top-3 z-[1200] flex max-h-[calc(100%-1.5rem)] w-80 max-w-[calc(100%-1.5rem)] flex-col rounded-lg border border-slate-200 bg-white shadow-lg">

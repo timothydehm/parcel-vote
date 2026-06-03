@@ -6,12 +6,12 @@ import { commentCounts } from "@/lib/comments";
 
 export const runtime = "nodejs";
 
-// GET /api/maps/:id — map, tally, your votes, comment counts, and the name you
-// are signed in as on this map (me), or null if not joined.
+// GET /api/maps/:id — map, vote limit, tally, your votes, comment counts, and
+// the name you are signed in as on this map (me), or null if not joined.
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const { data: map, error } = await db
     .from("maps")
-    .select("id, question, parcels, is_open")
+    .select("id, question, parcels, is_open, vote_limit")
     .eq("id", params.id)
     .single();
   if (error || !map) {

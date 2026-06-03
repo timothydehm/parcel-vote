@@ -15,6 +15,7 @@ export type MapData = {
   question: string;
   parcels: ParcelCollection;
   is_open: boolean;
+  vote_limit: number | null;
   counts: Record<string, number>;
   commentCounts: Record<string, number>;
   totalVoters: number;

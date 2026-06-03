@@ -6,6 +6,7 @@ type CreateResult = { id: string; admin_token: string };
 
 export default function CreateForm() {
   const [question, setQuestion] = useState("");
+  const [voteLimit, setVoteLimit] = useState("");
   const [fileName, setFileName] = useState("");
   const [parcels, setParcels] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
@@ -35,7 +36,11 @@ export default function CreateForm() {
       const r = await fetch("/api/maps", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ question, parcels }),
+        body: JSON.stringify({
+          question,
+          parcels,
+          vote_limit: voteLimit.trim() === "" ? null : Number(voteLimit),
+        }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Failed to create map.");
@@ -87,6 +92,20 @@ export default function CreateForm() {
           className="block w-full text-sm text-slate-600 file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm"
         />
         {fileName && <p className="mt-1 text-xs text-slate-500">{fileName}</p>}
+      </div>
+      <div>
+        <label className="mb-1 block text-sm font-medium">Votes per person</label>
+        <input
+          type="number"
+          min={1}
+          value={voteLimit}
+          onChange={(e) => setVoteLimit(e.target.value)}
+          placeholder="Leave blank for unlimited"
+          className="w-full rounded border border-slate-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+        />
+        <p className="mt-1 text-xs text-slate-500">
+          Cap how many parcels each person can choose, to force prioritization. Blank = unlimited.
+        </p>
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <button

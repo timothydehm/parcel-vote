@@ -1,12 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/supabase";
-import { getVoterId, newVoterId, VOTER_COOKIE } from "@/lib/voter";
+import { getParticipant } from "@/lib/auth";
 import { tallyMap } from "@/lib/votes";
 
 export const runtime = "nodejs";
 
-// POST /api/maps/:id/vote — toggle the caller's vote on one parcel.
-// Voter identity is a server-set httpOnly cookie: one vote per parcel per browser.
+// POST /api/maps/:id/vote — toggle the signed-in participant's vote on a parcel.
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   let body: { parcel_id?: unknown };
   try {
@@ -14,35 +13,22 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
-
   const parcelId = String(body?.parcel_id ?? "");
-  if (!parcelId) {
-    return NextResponse.json({ error: "parcel_id is required." }, { status: 400 });
-  }
+  if (!parcelId) return NextResponse.json({ error: "parcel_id is required." }, { status: 400 });
 
-  const { data: map, error: mapErr } = await db
-    .from("maps")
-    .select("id, is_open")
-    .eq("id", params.id)
-    .single();
-  if (mapErr || !map) {
-    return NextResponse.json({ error: "Map not found." }, { status: 404 });
-  }
-  if (!map.is_open) {
-    return NextResponse.json({ error: "This map is closed to new votes." }, { status: 403 });
-  }
+  const { data: map } = await db.from("maps").select("id, is_open").eq("id", params.id).single();
+  if (!map) return NextResponse.json({ error: "Map not found." }, { status: 404 });
+  if (!map.is_open) return NextResponse.json({ error: "This map is closed to new votes." }, { status: 403 });
 
-  let voterId = getVoterId(req);
-  const isNewVoter = !voterId;
-  if (!voterId) voterId = newVoterId();
+  const me = await getParticipant(req, map.id);
+  if (!me) return NextResponse.json({ error: "Join the map with a name first." }, { status: 401 });
 
-  // Toggle: remove the vote if it exists, otherwise add it.
   const { data: existing } = await db
     .from("votes")
     .select("id")
     .eq("map_id", map.id)
     .eq("parcel_id", parcelId)
-    .eq("voter_id", voterId)
+    .eq("voter_id", me.id)
     .maybeSingle();
 
   if (existing) {
@@ -50,22 +36,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   } else {
     const { error: insErr } = await db
       .from("votes")
-      .insert({ map_id: map.id, parcel_id: parcelId, voter_id: voterId });
-    // Ignore unique-violation races (double click); surface anything else.
+      .insert({ map_id: map.id, parcel_id: parcelId, voter_id: me.id });
     if (insErr && insErr.code !== "23505") {
       return NextResponse.json({ error: insErr.message }, { status: 500 });
     }
   }
 
-  const tally = await tallyMap(map.id, voterId);
-  const res = NextResponse.json(tally);
-  if (isNewVoter) {
-    res.cookies.set(VOTER_COOKIE, voterId, {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 365,
-    });
-  }
-  return res;
+  const tally = await tallyMap(map.id, me.id);
+  return NextResponse.json(tally);
 }

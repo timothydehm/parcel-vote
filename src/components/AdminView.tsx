@@ -64,6 +64,9 @@ export default function AdminView({ id, token }: { id: string; token: string }) 
         <a href={exportUrl("csv")} className="rounded bg-slate-800 px-3 py-1.5 text-sm text-white">
           Export votes (CSV)
         </a>
+        <a href={exportUrl("voters")} className="rounded bg-slate-800 px-3 py-1.5 text-sm text-white">
+          Export voters (CSV)
+        </a>
         <a href={exportUrl("comments")} className="rounded bg-slate-800 px-3 py-1.5 text-sm text-white">
           Export notes (CSV)
         </a>

@@ -9,7 +9,16 @@ function csvCell(s: string): string {
   return '"' + s.replace(/"/g, '""') + '"';
 }
 
-// GET /api/maps/:id/export?token=ADMIN&format=geojson|csv|comments
+function csvResponse(name: string, rows: string[]) {
+  return new NextResponse(rows.join("\n"), {
+    headers: {
+      "content-type": "text/csv; charset=utf-8",
+      "content-disposition": `attachment; filename="${name}"`,
+    },
+  });
+}
+
+// GET /api/maps/:id/export?token=ADMIN&format=geojson|csv|comments|voters
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const url = new URL(req.url);
   const token = url.searchParams.get("token") ?? "";
@@ -20,9 +29,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     .select("id, question, parcels, admin_token")
     .eq("id", params.id)
     .single();
-  if (!map) {
-    return NextResponse.json({ error: "Map not found." }, { status: 404 });
-  }
+  if (!map) return NextResponse.json({ error: "Map not found." }, { status: 404 });
   if (!token || token !== map.admin_token) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   }
@@ -30,19 +37,27 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   if (format === "comments") {
     const { data } = await db
       .from("comments")
-      .select("parcel_id, body, created_at")
+      .select("parcel_id, author_name, body, created_at")
       .eq("map_id", map.id)
       .order("created_at", { ascending: true });
-    const rows = ["parcel_id,comment,created_at"];
+    const rows = ["parcel_id,author,comment,created_at"];
     for (const c of data ?? []) {
-      rows.push([csvCell(c.parcel_id), csvCell(c.body), csvCell(c.created_at)].join(","));
+      rows.push(
+        [csvCell(c.parcel_id), csvCell(c.author_name ?? ""), csvCell(c.body), csvCell(c.created_at)].join(","),
+      );
     }
-    return new NextResponse(rows.join("\n"), {
-      headers: {
-        "content-type": "text/csv; charset=utf-8",
-        "content-disposition": `attachment; filename="parcel-pulse-comments-${map.id}.csv"`,
-      },
-    });
+    return csvResponse(`parcel-pulse-notes-${map.id}.csv`, rows);
+  }
+
+  if (format === "voters") {
+    const { data: votes } = await db.from("votes").select("parcel_id, voter_id").eq("map_id", map.id);
+    const { data: parts } = await db.from("participants").select("id, name").eq("map_id", map.id);
+    const nameById = new Map<string, string>((parts ?? []).map((p) => [p.id, p.name]));
+    const rows = ["parcel_id,voter_name"];
+    for (const v of votes ?? []) {
+      rows.push([csvCell(v.parcel_id), csvCell(nameById.get(v.voter_id) ?? "(anonymous)")].join(","));
+    }
+    return csvResponse(`parcel-pulse-voters-${map.id}.csv`, rows);
   }
 
   const { counts, totalVoters } = await tallyMap(map.id, null);
@@ -56,12 +71,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       const share = totalVoters ? (v / totalVoters).toFixed(4) : "0";
       rows.push([csvCell(pid), String(v), share, String(totalVoters)].join(","));
     }
-    return new NextResponse(rows.join("\n"), {
-      headers: {
-        "content-type": "text/csv; charset=utf-8",
-        "content-disposition": `attachment; filename="parcel-pulse-${map.id}.csv"`,
-      },
-    });
+    return csvResponse(`parcel-pulse-${map.id}.csv`, rows);
   }
 
   const out = {

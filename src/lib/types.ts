@@ -19,10 +19,12 @@ export type MapData = {
   commentCounts: Record<string, number>;
   totalVoters: number;
   yourVotes: string[];
+  me: string | null;
 };
 
 export type Comment = {
   id: string;
   body: string;
   created_at: string;
+  author_name?: string | null;
 };

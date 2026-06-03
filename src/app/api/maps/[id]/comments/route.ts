@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/supabase";
-import { getVoterId, newVoterId, VOTER_COOKIE } from "@/lib/voter";
+import { getParticipant } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -9,7 +9,7 @@ const MAX_BODY = 500;
 async function listComments(mapId: string, parcelId: string) {
   return db
     .from("comments")
-    .select("id, body, created_at")
+    .select("id, body, author_name, created_at")
     .eq("map_id", mapId)
     .eq("parcel_id", parcelId)
     .order("created_at", { ascending: true });
@@ -28,7 +28,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   return NextResponse.json({ comments: data ?? [] });
 }
 
-// POST /api/maps/:id/comments — add a note { parcel_id, body }.
+// POST /api/maps/:id/comments — add a note { parcel_id, body }. Requires a name.
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   let body: { parcel_id?: unknown; body?: unknown };
   try {
@@ -39,35 +39,22 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const parcelId = String(body?.parcel_id ?? "");
   const text = String(body?.body ?? "").trim();
-  if (!parcelId) {
-    return NextResponse.json({ error: "parcel_id is required." }, { status: 400 });
-  }
-  if (!text) {
-    return NextResponse.json({ error: "Note cannot be empty." }, { status: 400 });
-  }
+  if (!parcelId) return NextResponse.json({ error: "parcel_id is required." }, { status: 400 });
+  if (!text) return NextResponse.json({ error: "Note cannot be empty." }, { status: 400 });
   if (text.length > MAX_BODY) {
     return NextResponse.json({ error: `Note is too long (${MAX_BODY} max).` }, { status: 400 });
   }
 
-  const { data: map } = await db
-    .from("maps")
-    .select("id, is_open")
-    .eq("id", params.id)
-    .single();
-  if (!map) {
-    return NextResponse.json({ error: "Map not found." }, { status: 404 });
-  }
-  if (!map.is_open) {
-    return NextResponse.json({ error: "This map is closed." }, { status: 403 });
-  }
+  const { data: map } = await db.from("maps").select("id, is_open").eq("id", params.id).single();
+  if (!map) return NextResponse.json({ error: "Map not found." }, { status: 404 });
+  if (!map.is_open) return NextResponse.json({ error: "This map is closed." }, { status: 403 });
 
-  let voterId = getVoterId(req);
-  const isNewVoter = !voterId;
-  if (!voterId) voterId = newVoterId();
+  const me = await getParticipant(req, map.id);
+  if (!me) return NextResponse.json({ error: "Join the map with a name first." }, { status: 401 });
 
   const { error: insErr } = await db
     .from("comments")
-    .insert({ map_id: map.id, parcel_id: parcelId, voter_id: voterId, body: text });
+    .insert({ map_id: map.id, parcel_id: parcelId, voter_id: me.id, body: text, author_name: me.name });
   if (insErr) {
     return NextResponse.json({ error: insErr.message }, { status: 500 });
   }
@@ -76,15 +63,5 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-
-  const res = NextResponse.json({ comments: data ?? [] });
-  if (isNewVoter) {
-    res.cookies.set(VOTER_COOKIE, voterId, {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 365,
-    });
-  }
-  return res;
+  return NextResponse.json({ comments: data ?? [] });
 }

@@ -42,9 +42,12 @@ export default function MapVote({ id }: { id: string }) {
   const [comments, setComments] = useState<Comment[] | null>(null);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [noteError, setNoteError] = useState("");
+  const [joinName, setJoinName] = useState("");
+  const [joinPassword, setJoinPassword] = useState("");
+  const [joinBusy, setJoinBusy] = useState(false);
+  const [joinError, setJoinError] = useState("");
   const voting = useRef(false);
-  // Click handlers are bound once per parcel layer; this ref lets them read the
-  // current mode without rebinding every time the mode changes.
   const modeRef = useRef<Mode>("vote");
 
   useEffect(() => {
@@ -68,6 +71,42 @@ export default function MapVote({ id }: { id: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  async function join(e: React.FormEvent) {
+    e.preventDefault();
+    if (!joinName.trim() || joinBusy) return;
+    setJoinBusy(true);
+    setJoinError("");
+    try {
+      const r = await fetch(`/api/maps/${id}/join`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: joinName.trim(), password: joinPassword }),
+      });
+      let d: { error?: string } = {};
+      try {
+        d = await r.json();
+      } catch {
+        /* non-JSON */
+      }
+      if (r.ok) {
+        setJoinPassword("");
+        await load();
+      } else {
+        setJoinError(d.error || "Could not join.");
+      }
+    } catch {
+      setJoinError("Could not reach the server.");
+    } finally {
+      setJoinBusy(false);
+    }
+  }
+
+  async function switchName() {
+    await fetch(`/api/maps/${id}/logout`, { method: "POST" });
+    setSelected(null);
+    await load();
+  }
+
   function switchMode(m: Mode) {
     setMode(m);
     setSelected(null);
@@ -79,12 +118,18 @@ export default function MapVote({ id }: { id: string }) {
     setVersion((v) => v + 1);
     setComments(null);
     setDraft("");
+    setNoteError("");
     try {
       const r = await fetch(`/api/maps/${id}/comments?parcel_id=${encodeURIComponent(pid)}`, {
         cache: "no-store",
       });
-      const d = await r.json();
-      setComments(r.ok ? d.comments : []);
+      let d: { comments?: Comment[] } = {};
+      try {
+        d = await r.json();
+      } catch {
+        /* non-JSON response */
+      }
+      setComments(r.ok ? d.comments ?? [] : []);
     } catch {
       setComments([]);
     }
@@ -99,6 +144,10 @@ export default function MapVote({ id }: { id: string }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ parcel_id: pid }),
       });
+      if (r.status === 401) {
+        await load();
+        return;
+      }
       const d = await r.json();
       if (r.ok) {
         setData((prev) =>
@@ -106,6 +155,8 @@ export default function MapVote({ id }: { id: string }) {
         );
         setVersion((v) => v + 1);
       }
+    } catch {
+      /* a failed vote is silently ignored; the map state is unchanged */
     } finally {
       voting.current = false;
     }
@@ -114,6 +165,7 @@ export default function MapVote({ id }: { id: string }) {
   async function addComment() {
     if (!data || !selected || !draft.trim() || busy) return;
     setBusy(true);
+    setNoteError("");
     const pid = selected;
     try {
       const r = await fetch(`/api/maps/${id}/comments`, {
@@ -121,9 +173,18 @@ export default function MapVote({ id }: { id: string }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ parcel_id: pid, body: draft.trim() }),
       });
-      const d = await r.json();
+      if (r.status === 401) {
+        await load();
+        return;
+      }
+      let d: { comments?: Comment[]; error?: string } = {};
+      try {
+        d = await r.json();
+      } catch {
+        /* non-JSON response */
+      }
       if (r.ok) {
-        const list = d.comments as Comment[];
+        const list = d.comments ?? [];
         setComments(list);
         setDraft("");
         setData((prev) =>
@@ -131,8 +192,10 @@ export default function MapVote({ id }: { id: string }) {
         );
         setVersion((v) => v + 1);
       } else {
-        setError(d.error || "Could not add note.");
+        setNoteError(d.error || `Could not save note (error ${r.status}).`);
       }
+    } catch {
+      setNoteError("Could not reach the server. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -181,6 +244,50 @@ export default function MapVote({ id }: { id: string }) {
   if (error) return <div className="p-6 text-red-600">{error}</div>;
   if (!data) return <div className="p-6 text-slate-500">Loading map…</div>;
 
+  // Name gate: require a name before showing the map.
+  if (!data.me) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
+        <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <h1 className="text-lg font-semibold">{data.question}</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Enter a name to take part. Add a password to protect it (optional) so only you can use it.
+          </p>
+          <form onSubmit={join} className="mt-4 space-y-3">
+            <input
+              id="join-name"
+              name="name"
+              value={joinName}
+              onChange={(e) => setJoinName(e.target.value)}
+              placeholder="Your name"
+              maxLength={40}
+              autoFocus
+              className="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            />
+            <input
+              id="join-password"
+              name="password"
+              type="password"
+              value={joinPassword}
+              onChange={(e) => setJoinPassword(e.target.value)}
+              placeholder="Password (optional)"
+              maxLength={100}
+              className="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            />
+            {joinError && <p className="text-sm text-red-600">{joinError}</p>}
+            <button
+              type="submit"
+              disabled={joinBusy || !joinName.trim()}
+              className="w-full rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            >
+              {joinBusy ? "Joining…" : "Join"}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   const selVotes = selected ? data.counts[selected] ?? 0 : 0;
   const selShare = data.totalVoters ? Math.round((selVotes / data.totalVoters) * 100) : 0;
   const selMine = selected ? data.yourVotes.includes(selected) : false;
@@ -190,23 +297,42 @@ export default function MapVote({ id }: { id: string }) {
 
   return (
     <div className="flex h-screen flex-col">
-      <header className="border-b border-slate-200 bg-white px-4 py-3">
-        <h1 className="text-lg font-semibold">{data.question}</h1>
-        <p className="text-sm text-slate-500">
-          {!data.is_open
-            ? "This map is closed."
-            : mode === "vote"
-              ? "Vote mode — click a parcel to cast or remove your vote."
-              : "Notes mode — click a parcel to read or add notes."}{" "}
-          {"·"} {data.totalVoters} {data.totalVoters === 1 ? "person has" : "people have"} voted
-        </p>
+      <header className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
+        <div className="min-w-0">
+          <h1 className="truncate text-lg font-semibold">{data.question}</h1>
+          <p className="truncate text-sm text-slate-500">
+            {!data.is_open
+              ? "This map is closed."
+              : mode === "vote"
+                ? "Vote mode — click a parcel to cast or remove your vote."
+                : "Notes mode — click a parcel to read or add notes."}{" "}
+            {"·"} {data.totalVoters} {data.totalVoters === 1 ? "person has" : "people have"} voted
+          </p>
+          <p className="truncate text-xs text-slate-400">
+            You&rsquo;re <span className="font-medium text-slate-600">{data.me}</span>{" "}
+            {"·"}{" "}
+            <button onClick={switchName} className="underline hover:text-slate-700">
+              switch name
+            </button>
+          </p>
+        </div>
+        <div className="flex shrink-0 rounded-lg border border-slate-200 p-0.5">
+          <button onClick={() => switchMode("vote")} className={mode === "vote" ? segActive : segIdle}>
+            Vote
+          </button>
+          <button onClick={() => switchMode("notes")} className={mode === "notes" ? segActive : segIdle}>
+            Notes
+          </button>
+        </div>
       </header>
 
       <div className="relative flex-1">
-        <MapContainer center={[0, 0]} zoom={2} className="h-full w-full" preferCanvas>
+        <MapContainer center={[0, 0]} zoom={2} maxZoom={22} className="h-full w-full" preferCanvas>
           <TileLayer
             attribution="&copy; OpenStreetMap contributors"
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            maxZoom={22}
+            maxNativeZoom={19}
           />
           <FitBounds parcels={data.parcels} />
           <GeoJSON
@@ -216,15 +342,6 @@ export default function MapVote({ id }: { id: string }) {
             onEachFeature={onEach}
           />
         </MapContainer>
-
-        <div className="absolute left-3 top-3 z-[1200] flex rounded-lg border border-slate-200 bg-white p-0.5 shadow">
-          <button onClick={() => switchMode("vote")} className={mode === "vote" ? segActive : segIdle}>
-            Vote
-          </button>
-          <button onClick={() => switchMode("notes")} className={mode === "notes" ? segActive : segIdle}>
-            Notes
-          </button>
-        </div>
 
         {mode === "notes" && selected && (
           <div className="absolute right-3 top-3 z-[1200] flex max-h-[calc(100%-1.5rem)] w-80 max-w-[calc(100%-1.5rem)] flex-col rounded-lg border border-slate-200 bg-white shadow-lg">
@@ -257,6 +374,10 @@ export default function MapVote({ id }: { id: string }) {
                   <div key={c.id} className="mb-2 rounded bg-slate-50 p-2 text-sm">
                     <div className="whitespace-pre-wrap break-words">{c.body}</div>
                     <div className="mt-1 text-xs text-slate-400">
+                      {c.author_name ? (
+                        <span className="font-medium text-slate-500">{c.author_name}</span>
+                      ) : null}
+                      {c.author_name ? " · " : ""}
                       {new Date(c.created_at).toLocaleString()}
                     </div>
                   </div>
@@ -266,6 +387,8 @@ export default function MapVote({ id }: { id: string }) {
             {data.is_open && (
               <div className="border-t border-slate-100 p-3">
                 <textarea
+                  id="note-input"
+                  name="note"
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   placeholder="Add a note about this parcel…"
@@ -280,6 +403,7 @@ export default function MapVote({ id }: { id: string }) {
                 >
                   {busy ? "Adding…" : "Add note"}
                 </button>
+                {noteError && <p className="mt-2 text-sm text-red-600">{noteError}</p>}
               </div>
             )}
           </div>

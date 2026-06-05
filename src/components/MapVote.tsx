@@ -372,56 +372,59 @@ export default function MapVote({ id }: { id: string }) {
   return (
     <div className="flex h-screen flex-col">
       <header className="border-b border-slate-200 bg-white px-4 py-2.5">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="min-w-0 truncate text-base font-semibold sm:text-lg">{data.question}</h1>
-          <div className="flex shrink-0 items-center gap-2">
-            {mode === "vote" && (
+        <div className="flex flex-col items-center gap-2 sm:flex-row sm:items-start sm:gap-3">
+          <h1 className="max-w-full truncate text-base font-semibold sm:flex-1 sm:text-lg">{data.question}</h1>
+          <div className="flex flex-col items-center gap-1">
+            <div className="flex items-center gap-2">
+              {mode === "vote" && (
+                <div className="flex rounded-lg border border-slate-200 p-0.5">
+                  <button onClick={() => setView("all")} className={voteView === "all" ? segActive : segIdle}>
+                    Everyone
+                  </button>
+                  <button onClick={() => setView("mine")} className={voteView === "mine" ? segActive : segIdle}>
+                    Mine
+                  </button>
+                </div>
+              )}
               <div className="flex rounded-lg border border-slate-200 p-0.5">
-                <button onClick={() => setView("all")} className={voteView === "all" ? segActive : segIdle}>
-                  Everyone
+                <button onClick={() => switchMode("vote")} className={mode === "vote" ? segActive : segIdle}>
+                  Vote
                 </button>
-                <button onClick={() => setView("mine")} className={voteView === "mine" ? segActive : segIdle}>
-                  Mine
+                <button onClick={() => switchMode("notes")} className={mode === "notes" ? segActive : segIdle}>
+                  Notes
                 </button>
               </div>
-            )}
-            <div className="flex rounded-lg border border-slate-200 p-0.5">
-              <button onClick={() => switchMode("vote")} className={mode === "vote" ? segActive : segIdle}>
-                Vote
-              </button>
-              <button onClick={() => switchMode("notes")} className={mode === "notes" ? segActive : segIdle}>
-                Notes
-              </button>
             </div>
-          </div>
-        </div>
-        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
-          <span>
-            You&rsquo;re <span className="font-medium text-slate-700">{data.me}</span>
-          </span>
-          <button onClick={switchName} className="underline hover:text-slate-700">
-            switch
-          </button>
-          <span className="text-slate-300">·</span>
-          <span>
-            {data.totalVoters} {data.totalVoters === 1 ? "person" : "people"} voted
-          </span>
-          <span className="text-slate-300">·</span>
-          <span className="font-medium text-slate-700">{tallyText}</span>
-          {remaining !== null && (
-            <>
+            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
+              <span>
+                You&rsquo;re <span className="font-medium text-slate-700">{data.me}</span>
+              </span>
+              <button onClick={switchName} className="underline hover:text-slate-700">
+                switch
+              </button>
               <span className="text-slate-300">·</span>
               <span>
-                {remaining} of {data.vote_limit} votes left
+                {data.totalVoters} {data.totalVoters === 1 ? "person" : "people"} voted
               </span>
-            </>
-          )}
-          {!data.is_open && (
-            <>
               <span className="text-slate-300">·</span>
-              <span className="font-medium text-red-600">Closed</span>
-            </>
-          )}
+              <span className="font-medium text-slate-700">{tallyText}</span>
+              {remaining !== null && (
+                <>
+                  <span className="text-slate-300">·</span>
+                  <span>
+                    {remaining} of {data.vote_limit} votes left
+                  </span>
+                </>
+              )}
+              {!data.is_open && (
+                <>
+                  <span className="text-slate-300">·</span>
+                  <span className="font-medium text-red-600">Closed</span>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="hidden sm:block sm:flex-1" aria-hidden="true" />
         </div>
       </header>
 

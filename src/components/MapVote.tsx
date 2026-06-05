@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -350,6 +349,10 @@ export default function MapVote({ id }: { id: string }) {
   const remaining = data.vote_limit ? Math.max(0, data.vote_limit - data.yourVotes.length) : null;
   const parcelsVotedOn = Object.keys(data.counts).length;
   const myCount = data.yourVotes.length;
+  const tallyText =
+    mode === "vote" && voteView === "mine"
+      ? `${myCount} ${myCount === 1 ? "parcel" : "parcels"} selected by you`
+      : `${parcelsVotedOn} ${parcelsVotedOn === 1 ? "parcel" : "parcels"} voted on`;
 
   const hp = hoverPid && featureByPid[hoverPid] ? featureByPid[hoverPid] : null;
   const hoverInfo = hp
@@ -363,43 +366,62 @@ export default function MapVote({ id }: { id: string }) {
       }
     : null;
 
-  const segActive = "rounded-md bg-blue-600 px-3 py-1 text-sm font-medium text-white";
-  const segIdle = "rounded-md px-3 py-1 text-sm font-medium text-slate-600";
+  const segActive = "rounded-md bg-blue-600 px-2.5 py-1 text-sm font-medium text-white";
+  const segIdle = "rounded-md px-2.5 py-1 text-sm font-medium text-slate-600";
 
   return (
     <div className="flex h-screen flex-col">
-      <header className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
-        <div className="min-w-0">
-          <h1 className="truncate text-lg font-semibold">{data.question}</h1>
-          <p className="truncate text-sm text-slate-500">
-            {!data.is_open
-              ? "This map is closed."
-              : mode === "vote"
-                ? "Vote mode — click a parcel to cast or remove your vote."
-                : "Notes mode — click a parcel to read or add notes."}{" "}
-            {"·"} {data.totalVoters} {data.totalVoters === 1 ? "person has" : "people have"} voted
-            {remaining !== null ? (
-              <span className="font-medium text-slate-700">
-                {" · "}
+      <header className="border-b border-slate-200 bg-white px-4 py-2.5">
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="min-w-0 truncate text-base font-semibold sm:text-lg">{data.question}</h1>
+          <div className="flex shrink-0 items-center gap-2">
+            {mode === "vote" && (
+              <div className="flex rounded-lg border border-slate-200 p-0.5">
+                <button onClick={() => setView("all")} className={voteView === "all" ? segActive : segIdle}>
+                  Everyone
+                </button>
+                <button onClick={() => setView("mine")} className={voteView === "mine" ? segActive : segIdle}>
+                  Mine
+                </button>
+              </div>
+            )}
+            <div className="flex rounded-lg border border-slate-200 p-0.5">
+              <button onClick={() => switchMode("vote")} className={mode === "vote" ? segActive : segIdle}>
+                Vote
+              </button>
+              <button onClick={() => switchMode("notes")} className={mode === "notes" ? segActive : segIdle}>
+                Notes
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
+          <span>
+            You&rsquo;re <span className="font-medium text-slate-700">{data.me}</span>
+          </span>
+          <button onClick={switchName} className="underline hover:text-slate-700">
+            switch
+          </button>
+          <span className="text-slate-300">·</span>
+          <span>
+            {data.totalVoters} {data.totalVoters === 1 ? "person" : "people"} voted
+          </span>
+          <span className="text-slate-300">·</span>
+          <span className="font-medium text-slate-700">{tallyText}</span>
+          {remaining !== null && (
+            <>
+              <span className="text-slate-300">·</span>
+              <span>
                 {remaining} of {data.vote_limit} votes left
               </span>
-            ) : null}
-          </p>
-          <p className="truncate text-xs text-slate-400">
-            You&rsquo;re <span className="font-medium text-slate-600">{data.me}</span>{" "}
-            {"·"}{" "}
-            <button onClick={switchName} className="underline hover:text-slate-700">
-              switch name
-            </button>
-          </p>
-        </div>
-        <div className="flex shrink-0 rounded-lg border border-slate-200 p-0.5">
-          <button onClick={() => switchMode("vote")} className={mode === "vote" ? segActive : segIdle}>
-            Vote
-          </button>
-          <button onClick={() => switchMode("notes")} className={mode === "notes" ? segActive : segIdle}>
-            Notes
-          </button>
+            </>
+          )}
+          {!data.is_open && (
+            <>
+              <span className="text-slate-300">·</span>
+              <span className="font-medium text-red-600">Closed</span>
+            </>
+          )}
         </div>
       </header>
 
@@ -419,25 +441,6 @@ export default function MapVote({ id }: { id: string }) {
             onEachFeature={onEach}
           />
         </MapContainer>
-
-        {/* View toggle + live tally, top-center (clear of the zoom buttons and side panels). */}
-        {mode === "vote" && (
-          <div className="absolute left-1/2 top-3 z-[1100] flex -translate-x-1/2 flex-col items-center gap-1">
-            <div className="flex rounded-lg border border-slate-200 bg-white p-0.5 shadow">
-              <button onClick={() => setView("all")} className={voteView === "all" ? segActive : segIdle}>
-                Everyone
-              </button>
-              <button onClick={() => setView("mine")} className={voteView === "mine" ? segActive : segIdle}>
-                Mine
-              </button>
-            </div>
-            <div className="rounded-full bg-white/90 px-2.5 py-0.5 text-xs font-medium text-slate-600 shadow">
-              {voteView === "mine"
-                ? `${myCount} ${myCount === 1 ? "parcel" : "parcels"} selected`
-                : `${parcelsVotedOn} ${parcelsVotedOn === 1 ? "parcel" : "parcels"} voted on`}
-            </div>
-          </div>
-        )}
 
         {/* Parcel info box, top-right (hidden while the notes card is open). */}
         {hoverInfo && !(mode === "notes" && selected) && (

@@ -5,7 +5,11 @@ import type { ParcelFeature } from "@/lib/types";
 
 export const runtime = "nodejs";
 
-function csvCell(s: string): string {
+function csvCell(value: unknown): string {
+  let s = value == null ? "" : String(value);
+  // Defuse spreadsheet formula injection: a cell beginning with one of these
+  // can run as a formula when the CSV is opened in Excel / Google Sheets.
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
   return '"' + s.replace(/"/g, '""') + '"';
 }
 

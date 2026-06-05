@@ -9,6 +9,7 @@ create table if not exists maps (
   parcels     jsonb not null,
   admin_token text not null unique,
   is_open     boolean not null default true,
+  vote_limit  integer,
   created_at  timestamptz not null default now()
 );
 
@@ -21,6 +22,7 @@ create table if not exists votes (
   unique (map_id, parcel_id, voter_id)
 );
 create index if not exists votes_map_idx on votes (map_id);
+create index if not exists votes_map_voter_idx on votes (map_id, voter_id);
 
 create table if not exists comments (
   id          uuid primary key default gen_random_uuid(),
@@ -55,8 +57,27 @@ create table if not exists sessions (
 );
 create index if not exists sessions_participant_idx on sessions (participant_id);
 
--- Server uses the service role key (bypasses RLS). Enable RLS with no public
--- policies so the anon/public key cannot touch these tables directly.
+-- Aggregation done in the database so map loads transfer per-parcel counts,
+-- not every vote/comment row.
+create or replace function vote_tally(p_map_id uuid)
+returns json language sql stable as $$
+  select json_build_object(
+    'counts', coalesce((select json_object_agg(parcel_id, c) from (
+      select parcel_id, count(*)::int c from votes where map_id = p_map_id group by parcel_id) t), '{}'::json),
+    'total_voters', (select count(distinct voter_id)::int from votes where map_id = p_map_id)
+  );
+$$;
+
+create or replace function comment_tally(p_map_id uuid)
+returns json language sql stable as $$
+  select coalesce((select json_object_agg(parcel_id, c) from (
+    select parcel_id, count(*)::int c from comments where map_id = p_map_id group by parcel_id) t), '{}'::json);
+$$;
+
+revoke all on function vote_tally(uuid) from anon, authenticated;
+revoke all on function comment_tally(uuid) from anon, authenticated;
+
+-- All access happens server-side with the service role key (bypasses RLS).
 alter table maps         enable row level security;
 alter table votes        enable row level security;
 alter table comments     enable row level security;

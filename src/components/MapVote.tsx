@@ -33,6 +33,23 @@ function shareToOpacity(share: number) {
   return 0.15 + 0.7 * Math.min(1, share);
 }
 
+// Escape text before putting it in a Leaflet tooltip (which renders HTML).
+function esc(s: string) {
+  const map: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" };
+  return s.replace(/[&<>"]/g, (ch) => map[ch]);
+}
+
+// First non-empty value among candidate property names (case-insensitive).
+function findProp(props: Record<string, unknown>, candidates: string[]): string {
+  const lower: Record<string, unknown> = {};
+  for (const k of Object.keys(props)) lower[k.toLowerCase()] = props[k];
+  for (const c of candidates) {
+    const v = lower[c];
+    if (v != null && String(v).trim() !== "") return String(v).trim();
+  }
+  return "";
+}
+
 export default function MapVote({ id }: { id: string }) {
   const [data, setData] = useState<MapData | null>(null);
   const [error, setError] = useState("");
@@ -256,7 +273,14 @@ export default function MapVote({ id }: { id: string }) {
     const votes = data?.counts?.[pid] ?? 0;
     const notes = data?.commentCounts?.[pid] ?? 0;
     const noteTxt = notes > 0 ? ` · ${notes} note${notes === 1 ? "" : "s"}` : "";
-    layer.bindTooltip(`${votes} vote${votes === 1 ? "" : "s"}${noteTxt}`, { sticky: true });
+    const props = (feature?.properties ?? {}) as Record<string, unknown>;
+    const owner = findProp(props, ["owner", "owner_name", "ownername", "owner1", "deedholder", "taxpayer", "grantee", "own_name", "owner_nm", "par_own"]);
+    const addr = findProp(props, ["address", "situs", "situs_addr", "site_addr", "prop_addr", "propaddr", "full_address", "st_address", "location", "addr", "par_addr"]);
+    const lines = [`<b>Parcel ${esc(pid)}</b>`];
+    if (owner) lines.push(`Owner: ${esc(owner)}`);
+    if (addr) lines.push(esc(addr));
+    lines.push(`${votes} vote${votes === 1 ? "" : "s"}${noteTxt}`);
+    layer.bindTooltip(lines.join("<br>"), { sticky: true });
   }
 
   if (error) return <div className="p-6 text-red-600">{error}</div>;

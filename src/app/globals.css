@@ -12,3 +12,15 @@ body {
   height: 100%;
   background: #eef2f7;
 }
+
+/* Live parcel-picker map overlays and labels */
+.pin-label { background: none; border: none; color: #fff; font: 600 11px system-ui, -apple-system, sans-serif;
+  text-shadow: 0 0 3px rgba(0,0,0,.9), 0 0 1px #000; white-space: nowrap; text-align: center; pointer-events: none; }
+.streets .pin-label { color: #0f172a; text-shadow: 0 0 3px #fff, 0 0 1px #fff; }
+.pin-label.owner { font-size: 10px; line-height: 1.15; white-space: normal; overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.map-note { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 500;
+  background: rgba(15,23,42,.88); color: #fff; font-size: 13px; font-weight: 500; padding: 6px 13px;
+  border-radius: 999px; pointer-events: none; white-space: nowrap; }
+.box-sel { position: absolute; z-index: 600; border: 2px solid #2563eb; background: rgba(37,99,235,.12); pointer-events: none; }
+.box-sel.remove { border-color: #fff; background: rgba(255,255,255,.12); border-style: dashed; }

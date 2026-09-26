@@ -107,10 +107,11 @@ export function normalizeParcels(raw: unknown): ParcelCollection {
 
   const features: ParcelFeature[] = usable.map((f, i) => {
     const props = f.properties ?? {};
-    // Use the real parcel number when present; otherwise fall back to a stable
-    // index id. Features that share a parcel number (a multi-polygon parcel)
-    // intentionally share one id and count as a single parcel.
-    const pid = (idKey ? val(props, idKey) : "") || "p" + i;
+    // Prefer an id the source already assigned (e.g. the live parcel picker sets
+    // __pid to the PPN). Otherwise use a detected parcel-number column, falling
+    // back to a stable index id. Features that share an id (a multi-polygon
+    // parcel) intentionally count as a single parcel.
+    const pid = val(props, "__pid") || (idKey ? val(props, idKey) : "") || "p" + i;
     return {
       type: "Feature" as const,
       id: f.id,

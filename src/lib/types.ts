@@ -29,3 +29,6 @@ export type Comment = {
   created_at: string;
   author_name?: string | null;
 };
+
+// A parcel the admin picked from the live county map, ready to save.
+export type SelectedParcel = { pid: string; owner: string | null; geometry: unknown };

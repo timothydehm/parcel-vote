@@ -31,4 +31,9 @@ export type Comment = {
 };
 
 // A parcel the admin picked from the live county map, ready to save.
-export type SelectedParcel = { pid: string; owner: string | null; geometry: unknown };
+export type SelectedParcel = {
+  pid: string;
+  owner: string | null;
+  geometry: unknown;
+  props?: Record<string, unknown>; // extra display fields (address, type, neighborhood, ward)
+};

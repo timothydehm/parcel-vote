@@ -25,17 +25,23 @@ export default function CreateForm() {
       features: selected.map((s) => ({
         type: "Feature",
         geometry: s.geometry,
-        // Store the PPN (dashed) as the stable id, plus the owner name.
-        properties: { __pid: dash(s.pid), owner: s.owner },
+        // Store the PPN (dashed) as the stable id, plus owner, address, type, neighborhood, ward.
+        properties: { ...(s.props ?? {}), __pid: dash(s.pid), owner: s.owner },
       })),
     };
+
+    const body = JSON.stringify({ question, parcels, vote_limit: voteLimit.trim() === "" ? null : Number(voteLimit) });
+    // Vercel rejects request bodies over ~4.5 MB before our code runs.
+    if (body.length > 4_300_000) {
+      return setError(`That's too many parcels to save in one map (~${(body.length / 1e6).toFixed(1)} MB). Pick a smaller area.`);
+    }
 
     setBusy(true);
     try {
       const r = await fetch("/api/maps", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ question, parcels, vote_limit: voteLimit.trim() === "" ? null : Number(voteLimit) }),
+        body,
       });
       let data: { id?: string; admin_token?: string; error?: string } = {};
       try {
